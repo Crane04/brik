@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Brik",
+    "slug": "brik",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/console.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "brik",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.rahmayowa.brik"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#050b12",
+        "foregroundImage": "./assets/console.png"
+      },
+      "package": "com.rahmayowa.brik"
+    },
+    "web": {
+      "favicon": "./assets/console.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/console.png",
+          "imageWidth": 260,
+          "resizeMode": "contain",
+          "backgroundColor": "#050b12",
+          "dark": {
+            "image": "./assets/console.png",
+            "backgroundColor": "#050b12"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

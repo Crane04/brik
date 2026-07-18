@@ -1,0 +1,144 @@
+name: Ferome Expo iOS Build
+
+"on":
+  workflow_dispatch:
+    inputs:
+      project_url:
+        required: true
+        type: string
+      apple_api_key_id:
+        required: true
+        type: string
+      apple_issuer_id:
+        required: true
+        type: string
+      apple_api_key_content:
+        required: true
+        type: string
+      app_identifier:
+        required: true
+        type: string
+      scheme:
+        required: false
+        type: string
+      build_id:
+        required: true
+        type: string
+      callback_url:
+        required: true
+        type: string
+      upload_url:
+        required: true
+        type: string
+      auto_submit:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Notify Ferome started
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$(printf '{"build_id":"%s","status":"started","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          BUILD_ID: ${{ inputs.build_id }}
+
+      - name: Download project
+        run: |
+          curl -L "${{ inputs.project_url }}" -o project.zip
+          unzip -q project.zip -d project
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: project
+        run: npm ci || npm install
+
+      - name: Install Expo tooling
+        run: npm install -g eas-cli
+
+      - name: Write Apple API key
+        run: |
+          mkdir -p private_keys
+          printf '%s' "$APPLE_API_KEY_CONTENT" > "private_keys/AuthKey_${{ inputs.apple_api_key_id }}.p8"
+        env:
+          APPLE_API_KEY_CONTENT: ${{ inputs.apple_api_key_content }}
+
+      - name: Check Expo token
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "Missing EXPO_TOKEN GitHub secret. Create an Expo access token at https://expo.dev/accounts/[account]/settings/access-tokens and add it to this repo under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Initialize git repository for EAS
+        working-directory: project
+        run: |
+          git init
+          git config user.name "Ferome"
+          git config user.email "builds@ferome.local"
+          git add -A -- ':!node_modules' ':!.expo' ':!dist' ':!build'
+          git commit -m "Ferome build snapshot" --allow-empty
+
+      - name: Build iOS app
+        working-directory: project
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ASC_API_KEY_ID: ${{ inputs.apple_api_key_id }}
+          ASC_API_KEY_ISSUER_ID: ${{ inputs.apple_issuer_id }}
+          ASC_API_KEY_PATH: ../private_keys/AuthKey_${{ inputs.apple_api_key_id }}.p8
+        run: |
+          eas build --platform ios --local --non-interactive --output ../app.ipa
+
+      - name: Upload IPA to Ferome
+        run: |
+          curl -f -sS -X POST "${{ inputs.upload_url }}" -F "ipa=@app.ipa"
+
+      - name: Submit to App Store Connect
+        if: ${{ inputs.auto_submit }}
+        working-directory: project
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ASC_API_KEY_ID: ${{ inputs.apple_api_key_id }}
+          ASC_API_KEY_ISSUER_ID: ${{ inputs.apple_issuer_id }}
+          ASC_API_KEY_PATH: ../private_keys/AuthKey_${{ inputs.apple_api_key_id }}.p8
+        run: |
+          eas submit --platform ios --path ../app.ipa --non-interactive
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-${{ inputs.build_id }}
+          path: app.ipa
+
+      - name: Notify Ferome success
+        if: success()
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$(printf '{"build_id":"%s","status":"success","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          BUILD_ID: ${{ inputs.build_id }}
+
+      - name: Notify Ferome failure
+        if: failure()
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$(printf '{"build_id":"%s","status":"failed","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          BUILD_ID: ${{ inputs.build_id }}
