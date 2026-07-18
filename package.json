@@ -2,6 +2,10 @@
   "name": "brik",
   "version": "1.0.0",
   "main": "expo-router/entry",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/crane04/brik.git"
+  },
   "dependencies": {
     "expo": "~54.0.36",
     "expo-constants": "~18.0.13",
